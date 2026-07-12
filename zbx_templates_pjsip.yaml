@@ -1,0 +1,85 @@
+zabbix_export:
+  version: '7.4'
+  template_groups:
+    - uuid: ee6320c5532a48fba8d9e7c57aa4e2e3
+      name: Checks
+  templates:
+    - uuid: 71a9bc58e9c44cfb92cc43ae4357499a
+      template: 'Check pjsip peers FreePBX'
+      name: 'Check pjsip peers FreePBX'
+      groups:
+        - name: Checks
+      items:
+        - uuid: cc46048e64714bdd92d07abbe6ed45a4
+          name: 'Asterisk PJSIP peers Raw'
+          key: asterisk.pjsip.status.json
+          value_type: TEXT
+      discovery_rules:
+        - uuid: 34f1e0684b1249ceb6f7aa81b01004dd
+          name: 'Asterisk PJSIP peers discovery'
+          type: DEPENDENT
+          key: asterisk.pjsip.discovery
+          item_prototypes:
+            - uuid: abe2c62043a74eaa852e27ee85f5164d
+              name: 'PJSIP peer {#PJSIPSIPPEER} status'
+              type: DEPENDENT
+              key: 'pjsip.status[{#PEER}]'
+              value_type: TEXT
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$[''{#PEER}'']'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: asterisk.pjsip.status.json
+              tags:
+                - tag: pjsip
+                  value: status
+                - tag: pjsip
+                  value: '{#PEER}'
+              trigger_prototypes:
+                - uuid: 3df41513399f4241a6aaeeb3f065eb5d
+                  expression: 'find(/Check pjsip peers FreePBX/pjsip.status[{#PEER}],,"like","In use")=1'
+                  name: 'PJSIP {#PEER}: endpoint In use'
+                  priority: INFO
+                - uuid: 5620fd548fca4f2bafa9ffee4cca5678
+                  expression: 'find(/Check pjsip peers FreePBX/pjsip.status[{#PEER}],,"like","Unavailable")=1'
+                  name: 'PJSIP {#PEER}: endpoint Unavailable'
+                  priority: HIGH
+                - uuid: d7d3fcce0901484cac04ef4e4ec1accf
+                  expression: 'nodata(/Check pjsip peers FreePBX/pjsip.status[{#PEER}],10m)=1'
+                  name: 'PJSIP {#PEER}: no data'
+                  status: DISABLED
+                  discover: NO_DISCOVER
+                  priority: AVERAGE
+          master_item:
+            key: asterisk.pjsip.status.json
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var obj = JSON.parse(value);
+                  var arr = [];
+                  for (var key in obj) {
+                      arr.push({
+                          "{#PEER}": key,
+                          "{#STATUS}": obj[key]
+                      });
+                  }
+                  return JSON.stringify(arr);
+      valuemaps:
+        - uuid: 0ed85eb190194d17a115de0465b2a9ef
+          name: test
+          mappings:
+            - value: Unavailable
+              newvalue: '0'
+            - value: 'Not in use'
+              newvalue: '1'
+            - value: 'In use'
+              newvalue: '2'
+            - value: Busy
+              newvalue: '3'
+            - value: Ringing
+              newvalue: '4'
